@@ -1,0 +1,254 @@
+---
+title: "Gradient Descent for Linear Regression"
+format: pdf
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+library(tidyverse)
+```
+
+
+
+#### ---------------------------------------------------------------------------
+### Exploratory Data Analysis (EDA)
+
+```{r}
+outlets <- read_csv("outlets.csv")   # load dataset
+
+# regression task - profit (y) vs population (x)
+```
+
+
+```{r}
+library(GGally)
+
+ggpairs(data = outlets)    # correlation plot/matrix
+
+# exploratory graphs
+# a linear model is a good starting point
+# purpose - learn about gradient descent
+
+```
+
+
+
+#### ---------------------------------------------------------------------------
+### Data Splitting
+
+```{r}
+set.seed(208)
+# fixes the randomness - we are all going to get the same result
+
+library(rsample)
+
+data_split <- initial_split(data = outlets, prop = 0.8)
+
+# ?initial_split
+# prop decides how much goes into each set - 80% training, 20% test - this is decided randomly
+
+outlets_train <- training(data_split)   # training set
+# datast we use to train our model - find b0 and b1 using gradient descent
+
+outlets_test <- testing(data_split)   # test set
+
+```
+
+
+
+#### ---------------------------------------------------------------------------
+### Implement Gradient Descent
+
+```{r}
+# define variables
+# to sepcify a particular variable/column in R, use dataset$variable
+
+x <- outlets_train$population   # input/predictor
+y <- outlets_train$profit       # response
+
+```
+
+
+```{r}
+# define necessary functions
+
+# calculates y-hats given x - population value, b0-intercept, b1-slope (slide 6)
+predict_y <- function(x, intercept, slope)
+{
+  return(intercept + (slope * x) )
+}
+
+
+# calculates MSE (loss/cost) - slide 6
+loss_mse <- function(predictions, y)
+{
+  residuals = predictions - y
+  
+  return(mean(residuals ^ 2))
+}
+
+
+# calculates the gradients with respect to b0 and b1 (slide 12)
+gradient <- function(x, y, predictions)
+{
+  residuals = predictions - y
+  db0 = 2 * mean(residuals)
+  db1 = 2 * mean(x * residuals)
+  
+  return(list("db0" = db0, "db1" = db1))
+}
+
+# d - derivative , b0 and b1 -with respect to what
+# db0 - derivative of MSE wrt b0
+
+
+```
+
+
+```{r}
+# gradient descent algorithm
+# specify - starting value of b0 and b1
+# alpha - learning rate or setp size
+# niter - number of steps of the algorithm
+
+gradient_descent <- function(b0, b1, alpha, niter)
+{
+  
+  # define objects to store results
+  loss_values =  rep(NA, niter)
+  b0_values = rep(NA, niter)
+  b1_values = rep(NA, niter)
+  
+  
+  # gradient descent algorithm
+  for (epoch in 1:niter)
+  {
+    
+    predictions = predict_y(x, b0, b1)    # obtain predictions. y-hats
+    
+    loss = loss_mse(predictions, y)     # calculate MSE
+    
+    gradients = gradient(x, y, predictions)   # obtain gradients
+    db0 = gradients$db0   # gradient with respect to b0
+    db1 = gradients$db1   # gradient with respect to b1
+    
+    # slide 13
+    b0 = b0 - db0 * alpha     # update b0
+    b1 = b1 - db1 * alpha     # update b1
+    
+    
+    # store resulting values to track progress
+    loss_values[epoch] = loss
+    b0_values[epoch] = b0
+    b1_values[epoch] = b1
+    
+    
+    # display loss to track progress
+    if (epoch %% 10 == 0){print(paste0("Epoch: ",epoch, ", Loss: ", round(loss, 5)))}
+    
+  }
+  
+  print(paste0("Intercept: ", b0_values[niter], ", and Slope: ", b1_values[niter]))
+  
+  results <- data.frame(epoch = 1:niter, loss = loss_values, b0 = b0_values, b1 = b1_values)
+
+  ggplot(data = results, aes(x = epoch, y = loss)) + geom_line(color = "steelblue")
+  
+}
+
+
+```
+
+
+```{r}
+# implement the algorithm
+# starting values of b0=0, b1=0
+# step size is 0.1
+# run for 50 iterations
+gradient_descent(b0 = 0, b1 = 0, alpha = 0.01, niter = 2500)
+
+# e+23 means 10 to the power 23
+# for step size of .1, MSE is increasing - 
+# second try with step size = 0.01, and trial for 50 iterations
+# once MSE decreases, let's increase the number of iterations
+# at 500 iterations MSE is still decreasing, change to 2500
+# it's not decreasing any more, stabilized
+# b0 = -3.162, b1 = 1.133 - optimal values using gradient descent
+
+# we have got the best fit line - best in the sense which minimizes the MSE - the values of b0 and b1 that gives the smallest MSE
+# b0 - expected / predicted response (profit) when x = 0 (population = 0) - sometimes the b0 value doesn't make sense, not a meanigful interpretation
+# b1 (slope) - when x increaes by 1 unit (population increases by 100,000), the response is predicted / expected to increase (due to b1 being positive) by 1.133 x $1,000 dollars
+
+```
+
+
+```{r}
+# plot fitted line
+
+ggplot(data = outlets_train) +
+  geom_point(mapping = aes(x = population, y = profit)) +
+  geom_abline(intercept = -3.162, slope = 1.133, color = "blue")
+
+# this is the line (values of b0 and b1) that minimizes the MSE
+# positive slope - increasing relationship
+```
+
+
+```{r}
+# obtain predictions 
+
+predict_y(x = 17, intercept = -3.162, slope = 1.133)   
+# one-off prediction for population = 17
+
+predict_y(x = outlets_train$population, intercept = -3.162, slope = 1.133) # for all the training set
+
+```
+
+
+```{r}
+# test set RMSE 
+
+test_preds <- predict_y(x = outlets_test$population, intercept = -3.162, slope = 1.133)   # predicted response for the test set
+
+test_preds
+
+loss_mse(predictions = test_preds, y = outlets_test$profit)   # test set MSE
+
+sqrt(loss_mse(predictions = test_preds, y = outlets_test$profit))   # test set RMSE - Root Mean Squared Error (this is the same units as the response)
+
+2.517/mean(outlets_test$profit)
+
+# we are off from the observed response by 2500 dollars on average
+# about half of the average
+
+# Metrics::rmse(actual = outlets_test$profit, predicted = test_preds)
+
+```
+
+
+#### ---------------------------------------------------------------------------
+### Other Option to Run Linear Regression
+
+### with R
+
+```{r}
+# using lm() function - uses matrix algebra
+
+model_fit <- lm(profit ~ population, data = outlets_train)
+
+model_fit
+
+```
+
+
+```{r}
+# prediction
+
+model_preds <- predict(model_fit, newdata = outlets_test)
+
+Metrics::rmse(actual = outlets_test$profit, predicted = model_preds)
+
+```
+
+
+#### ---------------------------------------------------------------------------
